@@ -1,0 +1,225 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#07110c">
+<title>UAFM ROM Browser</title>
+<style>
+:root{--bg:#07110c;--panel:#101d15;--green:#39df78;--text:#f2fff5;--muted:#a4b7aa;--line:#294333}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,sans-serif}
+header{background:#0d1c12;padding:18px;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+header h1{margin:0;color:var(--green);font-size:23px}
+header p{margin:5px 0 0;color:var(--muted);font-size:12px}
+main{max-width:1000px;margin:auto;padding:16px}
+.hero{padding:22px;background:linear-gradient(135deg,#153d24,#0d1911);border-radius:17px;margin-bottom:17px}
+.hero h2{margin:0 0 8px}
+.hero p{color:var(--muted);line-height:1.5}
+input,select{width:100%;padding:14px;background:#101d15;border:1px solid var(--line);border-radius:11px;color:white;font-size:15px;margin-bottom:10px}
+.filters{display:flex;gap:8px;overflow-x:auto;padding:5px 0 15px}
+.filters button{background:#14251a;color:white;border:1px solid var(--line);border-radius:20px;padding:10px 15px;white-space:nowrap}
+.filters button.active{background:#1c5630;color:var(--green);border-color:var(--green)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:16px;min-width:0}
+.card h3{margin:8px 0}
+.card p{color:var(--muted);font-size:13px;line-height:1.5}
+.tag{color:var(--green);font-size:11px;font-weight:bold}
+.btn{display:block;width:100%;padding:12px;margin-top:9px;border-radius:10px;background:#183a25;color:white;border:1px solid var(--line);font-size:14px;text-align:center;text-decoration:none;cursor:pointer}
+.btn.primary{background:var(--green);color:#06150b;font-weight:bold;border-color:var(--green)}
+.notice{margin-top:20px;padding:15px;border:1px solid #75612a;background:#211d10;border-radius:12px;color:#f0dfaa;font-size:13px;line-height:1.5}
+dialog{width:92%;max-width:570px;max-height:85vh;overflow:auto;background:#101d15;color:white;border:1px solid var(--line);border-radius:16px;padding:20px}
+dialog::backdrop{background:#000c}
+dialog h2{color:var(--green)}
+dialog h3{color:var(--green);margin-top:20px}
+dialog li{margin:10px 0;line-height:1.5}
+.close{background:#28432f;color:white;border:0;padding:11px 18px;border-radius:9px}
+.empty{color:var(--muted);padding:20px;text-align:center}
+footer{text-align:center;padding:25px;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+
+<header>
+<h1>🟢 UAFM ROM Browser</h1>
+<p>UNIVERSAL ANDROID FIRMWARE DATABASE</p>
+</header>
+
+<main>
+<section class="hero">
+<h2>ROM CENTER</h2>
+<p>Находи прошивки для Xiaomi, Samsung, Redmi, POCO, Google Pixel, OnePlus и других Android-устройств.</p>
+</section>
+
+<input id="search" type="search" placeholder="🔎 Поиск модели или codename">
+
+<select id="type">
+<option value="all">Все категории</option>
+<option value="stock">Stock ROM</option>
+<option value="custom">Custom ROM</option>
+<option value="recovery">Recovery</option>
+<option value="tools">Инструменты</option>
+</select>
+
+<div class="filters" id="filters"></div>
+
+<h3>Каталог</h3>
+<p id="count" style="color:#a4b7aa;font-size:13px"></p>
+<div class="grid" id="catalog"></div>
+
+<div class="notice">
+<b>Внимание!</b> Проверяй точную модель, codename, регион и требования прошивки. Создай резервную копию данных. Неправильный файл может привести к неработоспособности устройства.
+</div>
+</main>
+
+<footer>UAFM ROM Browser v2.0 · Android + PC</footer>
+
+<dialog id="info">
+<h2 id="infoTitle"></h2>
+<div id="infoBody"></div>
+<button class="close" id="close">Закрыть</button>
+</dialog>
+
+<script>
+"use strict";
+
+const DB=[
+{brand:"Xiaomi",name:"Xiaomi Mi A1",code:"tissot",type:"custom",android:"Разные версии",desc:"Кастомные ROM для Mi A1.",apps:"ADB, Fastboot и совместимый Recovery.",url:"https://xdaforums.com/f/xiaomi-mi-a1-roms-kernels-recoveries.7024/"},
+{brand:"Xiaomi",name:"Xiaomi Mi 8 Lite",code:"platina",type:"custom",android:"Разные версии",desc:"Кастомные ROM для Mi 8 Lite.",apps:"ADB, Fastboot и совместимый Recovery.",url:"https://xdaforums.com/f/xiaomi-mi-8-lite-roms-kernels-recoveries.8997/"},
+{brand:"Xiaomi",name:"Xiaomi / Redmi / POCO",code:"Разные модели",type:"stock",android:"Зависит от модели",desc:"Официальные прошивки Xiaomi.",apps:"Mi Flash Tool для совместимых Fastboot ROM.",url:"https://new.c.mi.com/global/miuidownload/index"},
+{brand:"Samsung",name:"Samsung Galaxy",code:"Разные модели",type:"stock",android:"Зависит от модели",desc:"Каталог прошивок Samsung.",apps:"Odin и Samsung USB Driver на Windows.",url:"https://www.sammobile.com/firmwares/"},
+{brand:"Google",name:"Google Pixel",code:"Разные поколения",type:"stock",android:"Разные версии",desc:"Factory Images и OTA.",apps:"ADB и Fastboot Platform-Tools.",url:"https://developers.google.com/android/images"},
+{brand:"OnePlus",name:"OnePlus",code:"Разные модели",type:"stock",android:"Зависит от модели",desc:"Официальные обновления OnePlus.",apps:"Системное обновление и инструменты для модели.",url:"https://www.oneplus.com/support/softwareupgrade"},
+{brand:"Android",name:"LineageOS",code:"Поддерживаемые устройства",type:"custom",android:"Разные версии",desc:"Чистый Android для поддерживаемых устройств.",apps:"Recovery, ADB и Fastboot по инструкции.",url:"https://download.lineageos.org/"},
+{brand:"Android",name:"crDroid",code:"Поддерживаемые устройства",type:"custom",android:"Разные версии",desc:"Кастомная прошивка с дополнительными функциями.",apps:"Recovery и инструменты из инструкции устройства.",url:"https://crdroid.net/downloads"},
+{brand:"Android",name:"TWRP Recovery",code:"Поддерживаемые устройства",type:"recovery",android:"Разные версии",desc:"Кастомное Recovery.",apps:"ADB и Fastboot, если предусмотрено инструкцией.",url:"https://twrp.me/Devices/"},
+{brand:"Android",name:"Android Platform-Tools",code:"ADB / Fastboot",type:"tools",android:"Инструменты",desc:"Официальные инструменты Google.",apps:"Windows, Linux или macOS.",url:"https://developer.android.com/tools/releases/platform-tools"}
+];
+
+const catalog=document.getElementById("catalog");
+const search=document.getElementById("search");
+const type=document.getElementById("type");
+const filters=document.getElementById("filters");
+const info=document.getElementById("info");
+const infoTitle=document.getElementById("infoTitle");
+const infoBody=document.getElementById("infoBody");
+let activeBrand="Все";
+
+function element(tag,text){
+ const e=document.createElement(tag);
+ e.textContent=text;
+ return e;
+}
+
+function renderFilters(){
+ filters.replaceChildren();
+ ["Все","Xiaomi","Samsung","Google","OnePlus","Android"].forEach(brand=>{
+  const b=element("button",brand);
+  b.type="button";
+  b.className=activeBrand===brand?"active":"";
+  b.addEventListener("click",()=>{
+   activeBrand=brand;
+   renderFilters();
+   render();
+  });
+  filters.appendChild(b);
+ });
+}
+
+function showInfo(item){
+ infoTitle.textContent=item.name;
+ infoBody.replaceChildren();
+
+ function add(tag,text){
+  infoBody.appendChild(element(tag,text));
+ }
+
+ add("p","Производитель: "+item.brand);
+ add("p","Codename: "+item.code);
+ add("p","Android: "+item.android);
+ add("h3","Необходимые приложения");
+ add("p",item.apps);
+ add("h3","Инструкция");
+ [
+ "Открой источник прошивки.",
+ "Найди точную модель телефона.",
+ "Проверь codename и версию Android.",
+ "Прочитай требования автора.",
+ "Проверь совместимость recovery и firmware.",
+ "Скачай файл из оригинального источника.",
+ "Следуй инструкции именно этой сборки."
+ ].forEach(s=>add("p","• "+s));
+
+ const a=element("a","ОТКРЫТЬ ИСТОЧНИК ↗");
+ a.href=item.url;
+ a.target="_blank";
+ a.rel="noopener";
+ a.className="btn primary";
+ infoBody.appendChild(a);
+
+ if(typeof info.showModal==="function") info.showModal();
+ else alert("Твой браузер не поддерживает диалоговое окно. Открой источник кнопкой в карточке.");
+}
+
+function render(){
+ catalog.replaceChildren();
+ const q=search.value.trim().toLowerCase();
+
+ const found=DB.filter(item=>{
+  const text=(item.brand+" "+item.name+" "+item.code+" "+item.desc).toLowerCase();
+  return (activeBrand==="Все"||item.brand===activeBrand)
+   &&(type.value==="all"||item.type===type.value)
+   &&text.includes(q);
+ });
+
+ document.getElementById("count").textContent="Найдено: "+found.length;
+
+ if(!found.length){
+  catalog.appendChild(element("div","Ничего не найдено."));
+  return;
+ }
+
+ found.forEach(item=>{
+  const card=document.createElement("article");
+  card.className="card";
+
+  const tag=element("span",item.type.toUpperCase());
+  tag.className="tag";
+  card.appendChild(tag);
+  card.appendChild(element("h3",item.name));
+  card.appendChild(element("p","Производитель: "+item.brand));
+  card.appendChild(element("p","Codename: "+item.code));
+  card.appendChild(element("p","Android: "+item.android));
+  card.appendChild(element("p",item.desc));
+
+  const button=element("button","ИНФОРМАЦИЯ И ИНСТРУКЦИЯ");
+  button.type="button";
+  button.className="btn";
+  button.addEventListener("click",()=>showInfo(item));
+  card.appendChild(button);
+
+  const link=element("a","СКАЧАТЬ / ОТКРЫТЬ ↗");
+  link.className="btn primary";
+  link.href=item.url;
+  link.target="_blank";
+  link.rel="noopener";
+  card.appendChild(link);
+
+  catalog.appendChild(card);
+ });
+}
+
+search.addEventListener("input",render);
+type.addEventListener("change",render);
+document.getElementById("close").addEventListener("click",()=>info.close());
+
+info.addEventListener("click",event=>{
+ if(event.target===info) info.close();
+});
+
+renderFilters();
+render();
+</script>
+</body>
+</html>
